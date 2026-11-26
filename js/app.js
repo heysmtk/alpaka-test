@@ -3,7 +3,10 @@ import {
   DISCIPLINES, MAX_POINTS, MAX_POINTS_PER_DISCIPLINE,
   pointsFor, totalPoints, rankFor, nextRank, nextPointAt, workingLoad, toSeconds, formatTime,
 } from './scoring.js';
-import { loadDraft, saveDraft, clearDraft } from './storage.js';
+import {
+  loadDraft, saveDraft, clearDraft, loadTests, saveTests, upsertTest, setDeleted, mergeTests, newId,
+} from './storage.js';
+import { testsToCsv, parseTestsCsv } from './csv.js';
 
 const view = document.getElementById('view');
 const LAST = DISCIPLINES.length - 1;
@@ -241,7 +244,19 @@ function renderExercise() {
   view.replaceChildren(el('div', { class: 'page test' }, exercise, overview));
 }
 
+// Hotový test se uloží do historie hned při dokončení (nejdřív lokálně).
+// Když se k testu vrátíš a upravíš ho, přepíše se stejný záznam (draft si pamatuje savedId).
+let saveFailed = false;
+
 function finish() {
+  draft.savedId ??= newId();
+  draft.savedAt ??= new Date().toISOString();
+  saveFailed = !upsertTest({
+    id: draft.savedId,
+    created_at: draft.savedAt,
+    nick: draft.nick,
+    values: Object.fromEntries(DISCIPLINES.map((d) => [d.id, draft.values[d.id] ?? null])),
+  });
   goStep('result');
 }
 
@@ -272,6 +287,9 @@ function renderResult() {
     ),
     el('div', { class: 'result-body' },
       el('div', { class: 'rows' }, rows),
+      saveFailed
+        ? el('div', { class: 'card card-error' }, 'Test se nepodařilo uložit do historie (plné úložiště telefonu?). Výsledek nezavírej a udělej si screenshot.')
+        : el('div', { class: 'card' }, 'Test je uložený v telefonu, najdeš ho v Historii.'),
       skipped >= 0 && el('div', { class: 'card' }, 'Některé cviky jsi přeskočil/a, počítají se jako 0 bodů.'),
       skipped >= 0
         ? el('button', { type: 'button', class: 'btn btn-primary', onclick: () => goStep(skipped) }, 'Vrátit se k přeskočeným')
@@ -284,12 +302,140 @@ function renderResult() {
   );
 }
 
-// ---------- Historie (placeholder do fáze 3) ----------
+// ---------- Historie ----------
+
+let confirmDeleteId = null;   // test, u kterého se čeká na potvrzení smazání
+const openCards = new Set();  // rozbalené karty (aby se při překreslení nesbalily)
+let historyMessage = null;    // { text, lines, error } po importu
+
+const dateText = (iso) => new Date(iso).toLocaleDateString('cs-CZ');
+const resultText = (d, v) => (v == null ? '–' : formatValue(d, v));
+
+function downloadCsv() {
+  const blob = new Blob([testsToCsv(loadTests())], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = el('a', { href: url, download: `alpaka-test-${new Date().toISOString().slice(0, 10)}.csv` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function importCsv(file) {
+  if (!file) return;
+  if (file.size > 1024 * 1024) {
+    historyMessage = { text: 'Soubor je moc velký (max. 1 MB).', error: true };
+    return renderHistory();
+  }
+  const { tests, errors } = parseTestsCsv(await file.text());
+  const lines = errors.slice(0, 5);
+  if (errors.length > 5) lines.push(`… a dalších ${errors.length - 5} chyb`);
+  if (tests.length === 0) {
+    historyMessage = { text: 'Nic se nenaimportovalo.', lines, error: true };
+    return renderHistory();
+  }
+  const merged = mergeTests(loadTests(), tests);
+  if (!saveTests(merged.tests)) {
+    historyMessage = { text: 'Import se nepodařilo uložit do telefonu.', error: true };
+    return renderHistory();
+  }
+  const parts = [`přidáno ${merged.added}`];
+  if (merged.restored) parts.push(`obnoveno ${merged.restored}`);
+  if (merged.duplicates) parts.push(`přeskočeno duplicit ${merged.duplicates}`);
+  if (errors.length) parts.push(`chybných řádků ${errors.length}`);
+  historyMessage = { text: `Import hotový: ${parts.join(', ')}.`, lines, error: errors.length > 0 };
+  renderHistory();
+}
+
+function deleteControl(t) {
+  if (confirmDeleteId === t.id) {
+    return el('span', { class: 'confirm' },
+      el('span', {}, 'Smazat?'),
+      el('button', {
+        type: 'button', class: 'btn btn-small btn-danger',
+        onclick: () => { setDeleted(t.id, true); confirmDeleteId = null; renderHistory(); },
+      }, 'Ano, smazat'),
+      el('button', { type: 'button', class: 'btn btn-small', onclick: () => { confirmDeleteId = null; renderHistory(); } }, 'Zrušit'),
+    );
+  }
+  return el('button', {
+    type: 'button', class: 'btn btn-small', 'aria-label': `Smazat test ${t.nick}`,
+    onclick: () => { confirmDeleteId = t.id; renderHistory(); },
+  }, 'Smazat');
+}
+
+function historyCard(t) {
+  const total = totalPoints(t.values);
+  const rank = rankFor(total);
+  const card = el('details', { class: 'h-card' },
+    el('summary', {},
+      el('span', { class: 'h-main' },
+        el('b', {}, t.nick),
+        el('span', { class: 'muted' }, `${rank.emoji} ${rank.name} · ${dateText(t.created_at)}`),
+      ),
+      el('span', { class: 'h-points' }, String(total)),
+    ),
+    el('div', { class: 'h-body' },
+      DISCIPLINES.map((d) => el('div', { class: 'row-line' },
+        el('span', {}, d.short),
+        el('span', {}, el('span', { class: 'val' }, resultText(d, t.values[d.id])), el('b', {}, `${pointsFor(d.id, t.values[d.id])} b.`)),
+      )),
+      el('div', { class: 'h-actions' }, deleteControl(t)),
+    ),
+  );
+  card.open = openCards.has(t.id);
+  card.addEventListener('toggle', () => (card.open ? openCards.add(t.id) : openCards.delete(t.id)));
+  return card;
+}
+
+function historyTable(tests) {
+  return el('div', { class: 'h-table-wrap' }, el('table', { class: 'h-table' },
+    el('thead', {}, el('tr', {},
+      ['Datum', 'Přezdívka', ...DISCIPLINES.map((d) => d.short), 'Body', 'Hodnost', 'Akce'].map((h) => el('th', { scope: 'col' }, h)),
+    )),
+    el('tbody', {}, tests.map((t) => {
+      const total = totalPoints(t.values);
+      const rank = rankFor(total);
+      return el('tr', {},
+        el('td', {}, dateText(t.created_at)),
+        el('td', {}, el('b', {}, t.nick)),
+        DISCIPLINES.map((d) => el('td', {}, resultText(d, t.values[d.id]))),
+        el('td', {}, el('b', {}, String(total))),
+        el('td', {}, `${rank.emoji} ${rank.name}`),
+        el('td', {}, deleteControl(t)),
+      );
+    })),
+  ));
+}
 
 function renderHistory() {
-  view.replaceChildren(el('div', { class: 'page start' },
-    el('h1', {}, 'Historie testů'),
-    el('p', { class: 'muted' }, 'Přijde v další fázi: uložené testy, mazání a export do CSV.'),
+  const tests = loadTests()
+    .filter((t) => !t.deleted_at)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  const fileInput = el('input', {
+    type: 'file', accept: '.csv,text/csv', hidden: true,
+    onchange: () => importCsv(fileInput.files[0]),
+  });
+  const message = historyMessage && el('div', { class: `card${historyMessage.error ? ' card-error' : ''}`, role: 'status' },
+    historyMessage.text,
+    (historyMessage.lines ?? []).map((l) => el('div', {}, l)),
+  );
+  historyMessage = null;
+
+  view.replaceChildren(el('div', { class: 'page history' },
+    el('div', { class: 'h-head' },
+      el('h2', {}, `Historie testů (${tests.length})`),
+      el('div', { class: 'h-tools' },
+        el('button', { type: 'button', class: 'btn', disabled: tests.length === 0, onclick: downloadCsv }, 'Export CSV'),
+        el('button', { type: 'button', class: 'btn', onclick: () => fileInput.click() }, 'Import CSV'),
+        fileInput,
+      ),
+    ),
+    message,
+    tests.length === 0
+      ? el('div', { class: 'card' }, 'Zatím tu nic není. Dokonči test, nebo naimportuj CSV.')
+      : [el('div', { class: 'h-cards' }, tests.map(historyCard)), historyTable(tests)],
   ));
 }
 

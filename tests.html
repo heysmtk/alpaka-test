@@ -27,6 +27,8 @@
       DISCIPLINES, MAX_POINTS, RANKS, pointsFor, pointsByDiscipline, totalPoints,
       rankFor, nextRank, nextPointAt, workingLoad, toSeconds, formatTime,
     } from './js/scoring.js';
+    import { testsToCsv, parseTestsCsv, parseCsv, HEADER } from './js/csv.js';
+    import { mergeTests } from './js/storage.js';
 
     let passed = 0, failed = 0;
     const list = document.getElementById('list');
@@ -177,6 +179,70 @@
     eq(formatTime(90), '1:30', 'formát 90 s');
     eq(formatTime(65), '1:05', 'formát 65 s');
     eq(formatTime(0), '0:00', 'formát 0 s');
+
+    // --- CSV
+    const mk = (id, nick, values, extra = {}) => ({
+      id, created_at: '2026-11-26T10:30:00.000Z', nick,
+      values: { pullups: 12, legraise: null, bench: 8, squat: 0, dips: 9, plank: 140, hyper: null, cooper: 2450, ...values },
+      ...extra,
+    });
+    const sample = [mk('a1', 'Pepa', {}), mk('b2', 'Honza', { pullups: 20 })];
+    const csv = testsToCsv(sample);
+    eq(csv.charCodeAt(0), 0xFEFF, 'CSV začíná BOM');
+    eq(csv.split('\r\n')[0].split(';').length, HEADER.length, 'hlavička má správný počet sloupců');
+    eq(csv.split('\r\n')[0].startsWith('\uFEFFID testu;Datum;Přezdívka;Shyby;'), true, 'hlavička: oddělovač je středník');
+    eq(csv.split('\r\n')[1], 'a1;2026-11-26T10:30:00.000Z;Pepa;12;;8;0;9;140;;2450;21;Retardi', 'řádek: přeskočené = prázdná buňka, 0 zůstává 0');
+    eq(csv.endsWith('\r\n'), true, 'CSV končí novým řádkem');
+
+    const round = parseTestsCsv(csv);
+    eq(round.errors, [], 'import vlastního exportu bez chyb');
+    eq(round.tests, sample, 'export → import vrátí stejná data');
+
+    eq(testsToCsv([mk('a1', 'Pepa', {}, { deleted_at: '2026-11-27T00:00:00.000Z' }), mk('b2', 'Honza', {})]).split('\r\n').length, 3, 'smazané testy se neexportují');
+
+    // Nebezpečné začátky buněk (vzorce v Excelu) a speciální znaky
+    const nasty = ['=1+1', '+cmd', '-5', '@SUM(A1)', "'=x", "'abc", 'a;b', 'říká "ahoj"', 'dva\nřádky', '=HYPERLINK("x";"y")'];
+    const nastyTests = nasty.map((nick, i) => mk(`n${i}`, nick, {}));
+    const nastyCsv = testsToCsv(nastyTests);
+    const cells = parseCsv(nastyCsv).slice(1).map((r) => r[2]);
+    eq(cells[0], "'=1+1", 'nick "=1+1" dostane apostrof');
+    eq(cells[1], "'+cmd", 'nick "+cmd" dostane apostrof');
+    eq(cells[2], "'-5", 'nick "-5" dostane apostrof');
+    eq(cells[3], "'@SUM(A1)", 'nick "@SUM" dostane apostrof');
+    eq(cells.every((c, i) => !/^[=+\-@]/.test(c) || false), true, 'žádná buňka s přezdívkou nezačíná = + - @');
+    const nastyBack = parseTestsCsv(nastyCsv);
+    eq(nastyBack.errors, [], 'nebezpečné přezdívky: import bez chyb');
+    eq(nastyBack.tests.map((t) => t.nick), nasty.map((n) => n.replace(/\n/g, ' ')), 'nebezpečné přezdívky se po importu vrátí (nový řádek → mezera)');
+
+    // Chybné vstupy
+    eq(parseTestsCsv('').errors.length, 1, 'prázdný soubor = chyba');
+    eq(parseTestsCsv('a;b;c\r\n1;2;3').errors.length, 1, 'cizí CSV = chyba (chybí hlavička)');
+    const head = csv.split('\r\n')[0];
+    const bad = (row) => parseTestsCsv(`${head}\r\n${row}\r\n`);
+    eq(bad('a1;neni-datum;Pepa;1;1;1;1;1;1;1;1;;').tests.length, 0, 'neplatné datum = řádek přeskočen');
+    eq(bad('a1;2026-11-26;;1;1;1;1;1;1;1;1;;').tests.length, 0, 'prázdná přezdívka = řádek přeskočen');
+    eq(bad('a 1;2026-11-26;Pepa;1;1;1;1;1;1;1;1;;').tests.length, 0, 'ID s mezerou = řádek přeskočen');
+    eq(bad('a1;2026-11-26;Pepa;abc;1;1;1;1;1;1;1;;').tests.length, 0, 'text místo čísla = řádek přeskočen');
+    eq(bad('a1;2026-11-26;Pepa;-3;1;1;1;1;1;1;1;;').tests.length, 0, 'záporné číslo = řádek přeskočen');
+    eq(bad('a1;2026-11-26;Pepa;1;1').tests.length, 0, 'málo sloupců = řádek přeskočen');
+    eq(bad('a1;2026-11-26;Pepa;1;1;1;1;1;2:20;1:30;1;;').tests[0]?.values.plank, 140, 'čas ve tvaru m:ss se převede na sekundy');
+    eq(bad('a1;2026-11-26;Pepa;1;1;1;1;1;2:20;1:30;1;;').tests[0]?.values.hyper, 90, 'čas 1:30 = 90 s');
+    eq(bad('a1;2026-11-26;Pepa;1;1;1;1;1;1;1;99;;').tests[0]?.values.cooper, 99, 'běh 99 m se přijme');
+    const twice = parseTestsCsv(`${head}\r\na1;2026-11-26;A;1;1;1;1;1;1;1;1;;\r\na1;2026-11-26;B;1;1;1;1;1;1;1;1;;\r\n`);
+    eq([twice.tests.length, twice.errors.length], [1, 1], 'stejné ID dvakrát v souboru: druhý řádek chyba');
+    const mixed = parseTestsCsv(`${head}\r\nx1;2026-11-26;Dobrý;1;1;1;1;1;1;1;1;;\r\nx2;nesmysl;Špatný;1;1;1;1;1;1;1;1;;\r\n`);
+    eq([mixed.tests.length, mixed.errors.length], [1, 1], 'dobrý řádek projde i vedle špatného');
+    eq(parseTestsCsv(`${head}\r\nx1;2026-11-26;${'Z'.repeat(50)};1;1;1;1;1;1;1;1;;\r\n`).tests[0].nick.length, 30, 'dlouhá přezdívka se zkrátí na 30');
+    eq(parseTestsCsv(`${head}\nx1;2026-11-26;Pepa;1;1;1;1;1;1;1;1;;\n`).tests.length, 1, 'konce řádků LF fungují');
+    eq(parseTestsCsv(`${head}\r\nx1;2026-11-26;Pepa;1;1;1;1;1;1;1;1;999;Hacker\r\n`).tests[0].values.cooper, 1, 'body a hodnost z CSV se ignorují');
+
+    // Slučování při importu
+    const existing = [mk('a1', 'Pepa', {}), mk('b2', 'Honza', {}, { deleted_at: '2026-11-27T00:00:00.000Z' })];
+    const merged = mergeTests(existing, [mk('a1', 'Pepa', {}), mk('b2', 'Honza', {}), mk('c3', 'Karel', {})]);
+    eq([merged.added, merged.restored, merged.duplicates], [1, 1, 1], 'merge: 1 nový, 1 obnovený, 1 duplicita');
+    eq(merged.tests.length, 3, 'merge: 3 testy');
+    eq(merged.tests.some((t) => t.deleted_at), false, 'merge: obnovený test už není smazaný');
+    eq(existing[1].deleted_at !== undefined, true, 'merge nemění původní pole');
 
     // --- Výsledek
     const s = document.getElementById('summary');

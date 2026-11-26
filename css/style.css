@@ -308,3 +308,38 @@ main { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
   .calc-result { position: static; padding: 20px 48px; justify-content: center; gap: 40px; }
   .calc-grid { grid-template-columns: 1fr 1fr; max-width: 900px; margin: 0 auto; width: 100%; }
 }
+
+/* ---------- Historie ---------- */
+.card-error { background: #FDECEA; color: var(--error); }
+.card-error b { color: var(--error); }
+.h-tools .btn, .btn-small { white-space: nowrap; }
+.btn-small { min-height: 44px; padding: 0 14px; font-size: 14px; }
+.btn-danger { background: var(--error); border-color: var(--error); color: var(--white); }
+.h-head { display: flex; flex-direction: column; gap: 12px; }
+.h-tools { display: flex; gap: 10px; }
+.h-tools .btn { flex: 1; }
+.h-cards { display: flex; flex-direction: column; gap: 8px; }
+.h-card { background: var(--white); border-radius: 12px; }
+.h-card summary {
+  list-style: none; cursor: pointer; min-height: 64px; padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.h-card summary::-webkit-details-marker { display: none; }
+.h-main { display: flex; flex-direction: column; font-size: 14px; min-width: 0; }
+.h-main b { font-size: 18px; overflow-wrap: anywhere; }
+.h-points { font-family: var(--font-head); font-size: 40px; font-weight: 800; color: var(--green); line-height: 1; }
+.h-body { padding: 0 14px 12px; }
+.h-actions { display: flex; justify-content: flex-end; padding-top: 10px; }
+.confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; font-weight: 600; }
+.h-table-wrap { display: none; }
+
+@media (min-width: 900px) {
+  .h-head { flex-direction: row; align-items: center; justify-content: space-between; }
+  .h-cards { display: none; }
+  .h-table-wrap { display: block; overflow-x: auto; background: var(--white); border-radius: 12px; }
+  .h-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .h-table th, .h-table td { padding: 12px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .h-table th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .h-table tr:last-child td { border-bottom: 0; }
+  .history { max-width: 1400px; margin: 0 auto; width: 100%; }
+}

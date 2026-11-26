@@ -95,7 +95,7 @@ Telefon bude v `js/config.js`. Pozor: je pak veřejně vidět na webu i v repu.
     js/scoring.js     disciplíny, body, hodnosti, "další bod za", zátěž 80 %
     js/storage.js     lokální data (zatím jen rozdělaný test) a fronta k odeslání
     js/db.js          Supabase (přihlášení, synchronizace, ping)
-    js/csv.js         export / import
+    js/csv.js         export / import (čisté funkce, testy v tests.html)
     js/app.js         obrazovky
     tests.html        testy bodování (celá bodovací tabulka), otevře se v prohlížeči
     supabase/schema.sql
@@ -105,7 +105,7 @@ Telefon bude v `js/config.js`. Pozor: je pak veřejně vidět na webu i v repu.
 
 ## Fáze
 Postupuj po jedné fázi. Po každé: spustit, ukázat Tomášovi, po odsouhlasení odškrtnout
-tady a udělat commit. **Další na řadě: fáze 3.**
+tady a udělat commit. **Další na řadě: fáze 4.**
 
 - [x] **Fáze 0 – příprava:** plán, CLAUDE.md, design (`design/`), logo, favicon, .gitignore
 - [x] **Fáze 1 – bodování:** `js/scoring.js`, `tests.html`.
@@ -113,10 +113,15 @@ tady a udělat commit. **Další na řadě: fáze 3.**
 - [x] **Fáze 2 – appka:** kostra se 3 záložkami (mobil + web podle designu), průchod
       testem, výsledek, průběžné ukládání, kalkulačka. Zkopírovat `favicon.svg` a `logo.svg`.
       Hotovo, když jde na šířce 360 px projít celý test a obnovení stránky nic nesmaže.
-- [ ] **Fáze 3 – lokální historie:** ukládání, mazání s potvrzením, export / import CSV
+- [x] **Fáze 3 – lokální historie:** ukládání, mazání s potvrzením, export / import CSV
       (zatím bez zámku). Hotovo, když export → smazání → import vrátí stejná data.
-      Pozn.: záložka Historie je zatím placeholder; dokončený test se teď drží jen jako
-      "draft" v `storage.js` (do historie se uloží až tady).
+      Uděláno: test se uloží do historie při dokončení (úprava přepíše stejný záznam),
+      mobil = karty, web = tabulka, smazání má potvrzení, "měkké" (`deleted_at`).
+      CSV (`js/csv.js`): středník, BOM, sloupce ID testu / Datum / Přezdívka / 8 výkonů /
+      Body / Hodnost; čas v sekundách, přeskočený cvik = prázdná buňka. Body a hodnost se
+      při importu ignorují a počítají znovu. Import: nové ID se přidá, smazané se obnoví,
+      aktivní duplicity se přeskočí, chybné řádky se přeskočí a vypíšou. Texty začínající
+      `= + - @` dostanou apostrof (import ho odebere). Váha se neukládá ani neexportuje.
 - [ ] **Fáze 4 – Supabase:** `supabase/schema.sql`, RLS, zámek historie, synchronizace.
       Hotovo, když bez hesla nejde přes API nic přečíst, zapsat ani smazat (kromě
       čtení `ping`) a test z jednoho telefonu je vidět na druhém.
