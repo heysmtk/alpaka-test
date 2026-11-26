@@ -227,3 +227,58 @@ export function queueSync() {
 }
 
 globalThis.addEventListener?.('online', () => initDb());
+
+// ---------- Dostupnost databáze (ping) ----------
+// Čtení tabulky `ping` nevyžaduje přihlášení. Když se nepovede a telefon je online,
+// appka ukáže žlutou lištu (projekt je nejspíš pozastavený pro neaktivitu).
+
+const SEEN_KEY = 'alpaka.dbSeen.v1';
+const PING_TIMEOUT_MS = 8000;
+
+function readLastSeen() {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    const d = raw ? new Date(raw) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+export const health = {
+  status: 'unknown',        // 'unknown' | 'ok' | 'down' | 'offline'
+  lastSeen: readLastSeen(), // kdy telefon databázi naposledy viděl
+};
+
+const healthListeners = new Set();
+export const onHealthChange = (fn) => healthListeners.add(fn);
+
+export const parsePing = (data) => Array.isArray(data) && data.some((r) => r && r.id === 1);
+
+export async function checkHealth() {
+  if (!navigator.onLine) {
+    health.status = 'offline';
+  } else {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+    let ok = false;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/ping?select=id`, {
+        headers: { apikey: SUPABASE_KEY },
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      ok = res.ok && parsePing(await res.json());
+    } catch {
+      ok = false;
+    } finally {
+      clearTimeout(timer);
+    }
+    health.status = ok ? 'ok' : 'down';
+    if (ok) {
+      health.lastSeen = new Date();
+      try { localStorage.setItem(SEEN_KEY, health.lastSeen.toISOString()); } catch { /* nic */ }
+    }
+  }
+  healthListeners.forEach((fn) => fn());
+}

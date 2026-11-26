@@ -7,7 +7,10 @@ import {
   loadDraft, saveDraft, clearDraft, loadTests, saveTests, upsertTest, setDeleted, mergeTests, newId, needsSync,
 } from './storage.js';
 import { testsToCsv, parseTestsCsv } from './csv.js';
-import { state as db, initDb, login, logout, syncNow, queueSync, onChange } from './db.js';
+import {
+  state as db, health, initDb, login, logout, syncNow, queueSync, onChange, checkHealth, onHealthChange,
+} from './db.js';
+import { CONTACT_EMAIL } from './config.js';
 
 const view = document.getElementById('view');
 const LAST = DISCIPLINES.length - 1;
@@ -641,3 +644,37 @@ onChange(() => {
   if (historyKey() !== renderedKey || (db.loggedIn && !db.syncing)) renderHistory();
 });
 initDb();
+
+// ---------- Žlutá lišta: databáze není dostupná / offline ----------
+
+const banner = document.getElementById('banner');
+
+function renderBanner() {
+  if (health.status === 'offline') {
+    banner.replaceChildren('Jsi offline. Testovat můžeš dál, výsledky se uloží v telefonu.');
+    banner.hidden = false;
+  } else if (health.status === 'down') {
+    banner.replaceChildren(
+      'INFO: Databáze není dostupná (pravděpodobně je neaktivní). Prosím napiš na ',
+      el('a', { href: `mailto:${CONTACT_EMAIL}` }, CONTACT_EMAIL),
+      ' o obnovení. Testovat můžeš dál, výsledky se uloží v telefonu.',
+      health.lastSeen && el('div', {}, `Naposledy dostupná: ${dateText(health.lastSeen.toISOString())}`),
+    );
+    banner.hidden = false;
+  } else {
+    banner.hidden = true;
+  }
+}
+
+// Kontrola při otevření, při změně připojení a když se uživatel vrátí do appky (max. 1× za minutu).
+let lastCheck = 0;
+const recheck = (force = false) => {
+  if (!force && Date.now() - lastCheck < 60_000) return;
+  lastCheck = Date.now();
+  checkHealth();
+};
+onHealthChange(renderBanner);
+window.addEventListener('online', () => recheck(true));
+window.addEventListener('offline', () => recheck(true));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) recheck(); });
+recheck(true);

@@ -1,0 +1,27 @@
+# Několikrát denně přečte tabulku `ping`, aby Supabase Free projekt nepozastavil
+# pro neaktivitu. URL a publishable klíč jsou veřejné (chrání je RLS), nejsou to tajemství.
+# Není to zaručené. Ve veřejném repu GitHub plánované workflow vypne po 60 dnech bez
+# aktivity v repu; pak ho stačí znovu zapnout (záložka Actions → Enable workflow).
+name: keepalive
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'   # 4x denně, v 00:23, 06:23, 12:23 a 18:23 UTC
+  workflow_dispatch:         # jde spustit i ručně
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Přečíst tabulku ping
+        env:
+          SUPABASE_URL: https://povxuknpbashnyqlabgj.supabase.co
+          SUPABASE_KEY: sb_publishable_1FW7eQ8HlwcItPsPSbkENA_T8W9PbBK
+        run: |
+          response=$(curl --fail --silent --show-error --retry 3 --retry-delay 10 --max-time 30 \
+            "$SUPABASE_URL/rest/v1/ping?select=id" -H "apikey: $SUPABASE_KEY")
+          echo "Odpověď: $response"
+          echo "$response" | grep -q '"id":1'

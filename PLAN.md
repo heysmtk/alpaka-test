@@ -79,19 +79,20 @@ Supabase Free pozastaví projekt po zhruba 7 dnech nízké aktivity.
 2. **Záloha – žlutá lišta:** web při otevření zkusí přečíst `ping`. Když se to nepovede
    a telefon je online, nahoře se zobrazí jemně žlutá lišta s černým textem:
    > INFO: Databáze není dostupná (pravděpodobně je neaktivní). Prosím napiš na
-   > <telefon> o obnovení. Testovat můžeš dál, výsledky se uloží v telefonu.
+   > <e-mail> o obnovení. Testovat můžeš dál, výsledky se uloží v telefonu.
 
    Pokud telefon databázi dřív viděl, doplní se "Naposledy dostupná: <datum>".
    Bez internetu se místo toho ukáže "Jsi offline".
 3. **Obnovení:** supabase.com → projekt → Resume project.
 
-Telefon bude v `js/config.js`. Pozor: je pak veřejně vidět na webu i v repu.
+Kontaktní e-mail (`CONTACT_EMAIL`, je to `alpakatester@gmail.com`, ne soukromé číslo)
+je v `js/config.js`, v liště jako odkaz `mailto:`. Je tedy veřejně vidět na webu i v repu.
 
 ## Struktura
     index.html
     css/style.css
     img/favicon.svg, img/logo.svg
-    js/config.js      URL, publishable klíč, telefon, týmový e-mail
+    js/config.js      URL, publishable klíč, týmový e-mail, kontaktní e-mail
     js/scoring.js     disciplíny, body, hodnosti, "další bod za", zátěž 80 %
     js/storage.js     lokální data (zatím jen rozdělaný test) a fronta k odeslání
     js/db.js          Supabase (přihlášení, synchronizace, ping)
@@ -133,13 +134,19 @@ tady a udělat commit. **Další na řadě: fáze 5.**
       po změně, při návratu online a ručně. Offline s dřívějším přihlášením se historie
       z telefonu ukáže. Ověřeno: RLS (anon nic nepřečte ani nezapíše kromě čtení `ping`) i přihlášení se synchronizací.
 - [ ] **Fáze 5 – neaktivní databáze:** žlutá lišta, keepalive workflow.
+      Uděláno: `checkHealth()` v `db.js` čte `ping` přes `fetch` (8 s limit, bez přihlášení)
+      při otevření, při změně připojení a při návratu do appky (max. 1× za minutu);
+      lišta `#banner` v `index.html`: databáze nejde = žlutá s e-mailem a "Naposledy
+      dostupná", offline = "Jsi offline". `.github/workflows/keepalive.yml`: 4× denně
+      (`23 */6 * * *`) + ruční spuštění. Zbývá: ověřit workflow na GitHubu (po pushi
+      Actions → keepalive → Run workflow).
       Hotovo, když se lišta ukáže při ručně pozastaveném projektu.
 - [ ] **Fáze 6 – nasazení:** veřejný GitHub repo, Pages, test na mobilu.
 
 ## Co dodá Tomáš
 - Kdykoli před fází 6: `git init` a GitHub repozitář.
 - Před fází 4: Supabase projekt (URL + publishable klíč) a týmový účet s heslem.
-- Před fází 5: telefonní číslo.
+- Před fází 5: nic (kontakt v liště je e-mail `alpakatester@gmail.com`).
 
 ## Mimo MVP
 Offline PWA, grafy zlepšení, žebříček, samostatné účty pro každého.

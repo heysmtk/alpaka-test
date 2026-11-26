@@ -29,7 +29,7 @@
     } from './js/scoring.js';
     import { testsToCsv, parseTestsCsv, parseCsv, HEADER } from './js/csv.js';
     import { mergeTests, mergeFromServer, needsSync, snapshot } from './js/storage.js';
-    import { testToRow, rowToTest, sanitizeValues } from './js/db.js';
+    import { testToRow, rowToTest, sanitizeValues, parsePing } from './js/db.js';
 
     let passed = 0, failed = 0;
     const list = document.getElementById('list');
@@ -275,6 +275,13 @@
     eq(m5.tests[0].deleted_at, undefined, 'obnovení z jiného telefonu se přenese');
     eq(mergeFromServer([mk('a', 'A', {})], []).tests.length, 1, 'prázdná odpověď serveru nic nesmaže');
     eq(snapshot(mk('x', 'A', {})) === snapshot({ ...mk('x', 'A', {}), synced: true }), true, 'snapshot ignoruje příznak synced');
+
+    // --- Ping (dostupnost databáze)
+    eq(parsePing([{ id: 1, ok: true }]), true, 'ping: odpověď s řádkem 1 = databáze žije');
+    eq(parsePing([]), false, 'ping: prázdná odpověď = problém');
+    eq(parsePing({ message: 'chyba' }), false, 'ping: chybový objekt = problém');
+    eq(parsePing(null), false, 'ping: null = problém');
+    eq(parsePing([{ id: 2 }]), false, 'ping: cizí řádek = problém');
 
     // --- Výsledek
     const s = document.getElementById('summary');

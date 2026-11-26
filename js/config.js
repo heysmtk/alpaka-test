@@ -8,3 +8,6 @@ export const TEAM_EMAIL = 'alpakatester@gmail.com';
 
 // supabase-js z CDN s pevnou verzí (načítá se až když je potřeba, appka funguje i bez něj)
 export const SUPABASE_JS_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm';
+
+// Kam se má psát, když je databáze neaktivní (zobrazí se ve žluté liště). Je veřejně vidět.
+export const CONTACT_EMAIL = 'alpakatester@gmail.com';
