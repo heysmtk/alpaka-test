@@ -106,7 +106,7 @@ je v `js/config.js`, v liště jako odkaz `mailto:`. Je tedy veřejně vidět na
 
 ## Fáze
 Postupuj po jedné fázi. Po každé: spustit, ukázat Tomášovi, po odsouhlasení odškrtnout
-tady a udělat commit. **Další na řadě: fáze 5.**
+tady a udělat commit. **Další na řadě: fáze 6.**
 
 - [x] **Fáze 0 – příprava:** plán, CLAUDE.md, design (`design/`), logo, favicon, .gitignore
 - [x] **Fáze 1 – bodování:** `js/scoring.js`, `tests.html`.
@@ -133,12 +133,12 @@ tady a udělat commit. **Další na řadě: fáze 5.**
       = čeká). Synchronizace = odeslat čekající, pak stáhnout vše; běží po přihlášení,
       po změně, při návratu online a ručně. Offline s dřívějším přihlášením se historie
       z telefonu ukáže. Ověřeno: RLS (anon nic nepřečte ani nezapíše kromě čtení `ping`) i přihlášení se synchronizací.
-- [ ] **Fáze 5 – neaktivní databáze:** žlutá lišta, keepalive workflow.
+- [x] **Fáze 5 – neaktivní databáze:** žlutá lišta, keepalive workflow.
       Uděláno: `checkHealth()` v `db.js` čte `ping` přes `fetch` (8 s limit, bez přihlášení)
       při otevření, při změně připojení a při návratu do appky (max. 1× za minutu);
       lišta `#banner` v `index.html`: databáze nejde = žlutá s e-mailem a "Naposledy
       dostupná", offline = "Jsi offline". `.github/workflows/keepalive.yml`: 4× denně
-      (`23 */6 * * *`) + ruční spuštění. Zbývá: ověřit workflow na GitHubu (po pushi
+      (`23 */6 * * *`) + ruční spuštění. Ověřeno: lišta i workflow na GitHubu (po pushi
       Actions → keepalive → Run workflow).
       Hotovo, když se lišta ukáže při ručně pozastaveném projektu.
 - [ ] **Fáze 6 – nasazení:** veřejný GitHub repo, Pages, test na mobilu.
