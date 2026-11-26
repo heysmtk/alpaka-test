@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Testy bodování</title>
+  <style>
+    body { font: 16px/1.4 system-ui, sans-serif; margin: 16px; background: #F4F5F0; color: #14201B; }
+    h1 { margin: 0 0 8px; }
+    #summary { font-weight: bold; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+    #summary.ok { background: #1F4D3A; color: #fff; }
+    #summary.fail { background: #b3261e; color: #fff; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 2px 0; font-family: monospace; font-size: 14px; }
+    li.pass::before { content: "✓ "; color: #1F4D3A; }
+    li.fail { color: #b3261e; font-weight: bold; }
+    li.fail::before { content: "✗ "; }
+  </style>
+</head>
+<body>
+  <h1>Testy bodování</h1>
+  <div id="summary">Běží…</div>
+  <ul id="list"></ul>
+
+  <script type="module">
+    import {
+      DISCIPLINES, MAX_POINTS, RANKS, pointsFor, pointsByDiscipline, totalPoints,
+      rankFor, nextRank, workingLoad, toSeconds, formatTime,
+    } from './js/scoring.js';
+
+    let passed = 0, failed = 0;
+    const list = document.getElementById('list');
+
+    function eq(actual, expected, label) {
+      const ok = JSON.stringify(actual) === JSON.stringify(expected);
+      ok ? passed++ : failed++;
+      const li = document.createElement('li');
+      li.className = ok ? 'pass' : 'fail';
+      li.textContent = ok
+        ? label
+        : `${label}: čekáno ${JSON.stringify(expected)}, je ${JSON.stringify(actual)}`;
+      list.appendChild(li);
+    }
+
+    // Tabulka [vstup, očekané body] pro jednu disciplínu
+    function table(id, rows) {
+      for (const [input, expected] of rows) {
+        eq(pointsFor(id, input), expected, `${id}(${input}) = ${expected}`);
+      }
+    }
+
+    // --- Počet disciplín a maximum
+    eq(DISCIPLINES.length, 8, '8 disciplín');
+    eq(MAX_POINTS, 80, 'maximum 80 bodů');
+
+    // --- Opakování (hranice stupňů, strop 10, nula)
+    table('pullups',  [[0, 0], [1, 0], [2, 1], [3, 1], [19, 9], [20, 10], [21, 10], [100, 10]]);
+    table('legraise', [[0, 0], [1, 0], [2, 1], [19, 9], [20, 10], [50, 10]]);
+    table('bench',    [[0, 0], [3, 0], [4, 1], [7, 1], [8, 2], [39, 9], [40, 10], [41, 10]]);
+    table('squat',    [[0, 0], [3, 0], [4, 1], [39, 9], [40, 10], [99, 10]]);
+    table('dips',     [[0, 0], [2, 0], [3, 1], [5, 1], [6, 2], [29, 9], [30, 10], [31, 10]]);
+
+    // --- Čas: plank a hyperextenze (pod 1:30 = 0, pak 1 + floor((s-90)/10), strop 10)
+    for (const id of ['plank', 'hyper']) {
+      table(id, [
+        [0, 0], [89, 0], [90, 1], [99, 1], [100, 2], [179, 9], [180, 10],
+        [181, 10], [600, 10],
+      ]);
+    }
+
+    // --- Cooperův běh (pod 2100 m = 0, pak 1 + floor((m-2100)/100), strop 10)
+    table('cooper', [
+      [0, 0], [2099, 0], [2100, 1], [2199, 1], [2200, 2], [2900, 9], [2999, 9],
+      [3000, 10], [3001, 10], [5000, 10],
+    ]);
+
+    // --- Celá bodovací tabulka (src/challenge_bodovaci_tabulka.xlsx): vstup pro 1–10 bodů
+    const fullTable = {
+      pullups:  [2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+      legraise: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+      bench:    [4, 8, 12, 16, 20, 24, 28, 32, 36, 40],
+      squat:    [4, 8, 12, 16, 20, 24, 28, 32, 36, 40],
+      dips:     [3, 6, 9, 12, 15, 18, 21, 24, 27, 30],
+      plank:    [90, 100, 110, 120, 130, 140, 150, 160, 170, 180],
+      hyper:    [90, 100, 110, 120, 130, 140, 150, 160, 170, 180],
+      cooper:   [2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000],
+    };
+    for (const [id, inputs] of Object.entries(fullTable)) {
+      inputs.forEach((input, i) => {
+        eq(pointsFor(id, input), i + 1, `tabulka ${id}: ${input} = ${i + 1} b.`);
+        eq(pointsFor(id, input - 1), i, `tabulka ${id}: ${input - 1} = ${i} b.`);
+      });
+    }
+
+    // --- Neplatné vstupy = 0, desetinná čísla se zaokrouhlí dolů
+    eq(pointsFor('pullups', ''), 0, 'prázdný řetězec = 0');
+    eq(pointsFor('pullups', null), 0, 'null = 0');
+    eq(pointsFor('pullups', undefined), 0, 'undefined = 0');
+    eq(pointsFor('pullups', NaN), 0, 'NaN = 0');
+    eq(pointsFor('pullups', 'abc'), 0, 'text = 0');
+    eq(pointsFor('pullups', -5), 0, 'záporné = 0');
+    eq(pointsFor('pullups', '8'), 4, 'číslo jako text "8" = 4');
+    eq(pointsFor('pullups', 3.9), 1, '3,9 opakování → 3 → 1 bod');
+    eq(pointsFor('plank', 89.9), 0, '89,9 s → 89 → 0');
+    let threw = false;
+    try { pointsFor('neexistuje', 5); } catch { threw = true; }
+    eq(threw, true, 'neznámá disciplína vyhodí chybu');
+
+    // --- Součty
+    eq(totalPoints({}), 0, 'prázdné výsledky = 0 bodů');
+    eq(totalPoints(undefined), 0, 'undefined výsledky = 0 bodů');
+    const maxResults = {
+      pullups: 20, legraise: 20, bench: 40, squat: 40, dips: 30,
+      plank: 180, hyper: 180, cooper: 3000,
+    };
+    eq(totalPoints(maxResults), 80, 'samé maximum = 80');
+    eq(totalPoints({ ...maxResults, cooper: 5000 }), 80, 'přes maximum pořád 80');
+    eq(
+      totalPoints({ pullups: 10, legraise: 10, bench: 8, squat: 8, dips: 9, plank: 120, hyper: 100, cooper: 2400 }),
+      5 + 5 + 2 + 2 + 3 + 4 + 2 + 4,
+      'smíšený příklad = 27',
+    );
+    eq(pointsByDiscipline({ pullups: 10, cooper: 2400 }).pullups, 5, 'rozpis: shyby 5');
+    eq(pointsByDiscipline({ pullups: 10, cooper: 2400 }).cooper, 4, 'rozpis: běh 4');
+    eq(pointsByDiscipline({ pullups: 10 }).plank, 0, 'rozpis: přeskočená = 0');
+
+    // --- Hodnosti: hranice každé hodnosti
+    const rankCases = [
+      [0, 'Alpaky'], [9, 'Alpaky'], [10, 'Retardi'], [24, 'Retardi'],
+      [25, 'Zdechliny'], [34, 'Zdechliny'], [35, 'Sluníčkáři'], [44, 'Sluníčkáři'],
+      [45, 'Hobby sportovci'], [54, 'Hobby sportovci'],
+      [55, 'Vrcholoví sportovci'], [69, 'Vrcholoví sportovci'],
+      [70, 'Magoři a psychopati'], [80, 'Magoři a psychopati'],
+    ];
+    for (const [pts, name] of rankCases) eq(rankFor(pts).name, name, `${pts} b. → ${name}`);
+    eq(RANKS.every((r) => r.emoji), true, 'každá hodnost má emoji');
+    eq(RANKS.length, 7, '7 hodností');
+
+    // --- Kolik chybí do další hodnosti
+    eq(nextRank(0)?.missing, 10, '0 b.: do Retardů chybí 10');
+    eq(nextRank(0)?.rank.name, 'Retardi', '0 b.: další je Retardi');
+    eq(nextRank(9)?.missing, 1, '9 b.: chybí 1');
+    eq(nextRank(10)?.rank.name, 'Zdechliny', '10 b.: další Zdechliny');
+    eq(nextRank(10)?.missing, 15, '10 b.: chybí 15');
+    eq(nextRank(69)?.rank.name, 'Magoři a psychopati', '69 b.: další Magoři');
+    eq(nextRank(69)?.missing, 1, '69 b.: chybí 1');
+    eq(nextRank(70), null, '70 b.: žádná vyšší hodnost');
+    eq(nextRank(80), null, '80 b.: žádná vyšší hodnost');
+
+    // --- Zátěž 80 % váhy (po 0,5 kg)
+    eq(workingLoad(80), 64, '80 kg → 64 kg');
+    eq(workingLoad(75), 60, '75 kg → 60 kg');
+    eq(workingLoad(83), 66.5, '83 kg → 66,4 → 66,5 kg');
+    eq(workingLoad(0), 0, 'váha 0 → 0');
+    eq(workingLoad(''), 0, 'prázdná váha → 0');
+    eq(workingLoad(-10), 0, 'záporná váha → 0');
+
+    // --- Čas
+    eq(toSeconds(1, 30), 90, '1:30 = 90 s');
+    eq(toSeconds('2', '5'), 125, 'text "2" a "5" = 125 s');
+    eq(toSeconds('', ''), 0, 'prázdná pole = 0 s');
+    eq(toSeconds(0, 89), 89, '0:89 = 89 s');
+    eq(pointsFor('plank', toSeconds(1, 30)), 1, 'plank 1:30 = 1 bod');
+    eq(pointsFor('plank', toSeconds(1, 29)), 0, 'plank 1:29 = 0 bodů');
+    eq(formatTime(90), '1:30', 'formát 90 s');
+    eq(formatTime(65), '1:05', 'formát 65 s');
+    eq(formatTime(0), '0:00', 'formát 0 s');
+
+    // --- Výsledek
+    const s = document.getElementById('summary');
+    s.textContent = failed === 0
+      ? `Vše v pořádku: ${passed} testů prošlo`
+      : `Chyba: ${failed} testů neprošlo, ${passed} prošlo`;
+    s.className = failed === 0 ? 'ok' : 'fail';
+    document.title = (failed === 0 ? '✓ ' : '✗ ') + document.title;
+  </script>
+</body>
+</html>

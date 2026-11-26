@@ -1,0 +1,5 @@
+# podklady do veřejného repa nepatří
+src/
+# tajné věci
+.env
+.env.*
