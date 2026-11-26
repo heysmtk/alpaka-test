@@ -159,18 +159,28 @@ function renderExercise() {
   // Vstup podle typu disciplíny
   let entry;
   if (d.unit === 'time') {
+    const sync = () => setValue(toSeconds(minutes.value, seconds.value));
     const minutes = digitsInput({
-      value: String(Math.floor(current() / 60)), maxLength: 2, label: 'Minuty', className: 'big-input',
-      onChange: () => setValue(toSeconds(minutes.value, seconds.value)),
+      value: String(Math.floor(current() / 60)), maxLength: 2, label: 'Minuty', className: 'big-input time-input', onChange: sync,
     });
     const seconds = digitsInput({
-      value: String(current() % 60), maxLength: 2, label: 'Sekundy', className: 'big-input',
-      onChange: () => setValue(toSeconds(minutes.value, seconds.value)),
+      value: String(current() % 60), maxLength: 2, label: 'Sekundy', className: 'big-input time-input', onChange: sync,
     });
-    entry = el('div', { class: 'time-pair' },
-      el('label', { class: 'time-cell' }, minutes, 'minuty'),
-      el('span', { class: 'colon', 'aria-hidden': 'true' }, ':'),
-      el('label', { class: 'time-cell' }, seconds, 'sekundy'),
+    // Tlačítka mění čas po 10 s (tak se mění body)
+    const change = (delta) => {
+      const total = Math.max(0, toSeconds(minutes.value, seconds.value) + delta);
+      minutes.value = String(Math.floor(total / 60));
+      seconds.value = String(total % 60);
+      sync();
+    };
+    entry = el('div', { class: 'stepper' },
+      el('button', { type: 'button', class: 'btn', 'aria-label': 'Ubrat 10 sekund', onclick: () => change(-10) }, '−'),
+      el('div', { class: 'time-fields' },
+        el('div', { class: 'time-cell' }, minutes, el('span', {}, 'min')),
+        el('span', { class: 'colon', 'aria-hidden': 'true' }, ':'),
+        el('div', { class: 'time-cell' }, seconds, el('span', {}, 'sek')),
+      ),
+      el('button', { type: 'button', class: 'btn', 'aria-label': 'Přidat 10 sekund', onclick: () => change(10) }, '+'),
     );
   } else {
     const step = d.unit === 'meters' ? 50 : 1;
