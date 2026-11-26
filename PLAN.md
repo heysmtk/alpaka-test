@@ -29,13 +29,18 @@ Hodnosti: 70+ Magoři a psychopati, 55+ Vrcholoví sportovci, 45+ Hobby sportovc
 ## Obrazovky
 1. **Spustit testování** (hlavní): přezdívka a **tělesná váha (obojí povinné)**.
    Z váhy se spočítá zátěž na bench a dřep (80 %). Na body nemá váha vliv.
-   Čas se zadává dvěma poli (minuty, sekundy).
+   Čas se zadává dvěma poli (minuty, sekundy). U cviku se průběžně ukazuje
+   "N bodů z 10 · další bod za …". Přehled cviků je na mobilu sbalený, na webu vlevo.
+   Pole váhy je úzké a na středu. Rozdělaný test se po otevření stránky nabídne
+   na startu (Pokračovat / Zahodit).
    Pevné pořadí, Zpět / Další / Přeskočit, přehled cviků pro návrat k přeskočeným.
    Na konci body po cvicích, součet, hodnost, kolik chybí do další.
 2. **Historie testů** (celá záložka pod týmovým heslem): datum, přezdívka, výkony,
    body, hodnost, stav synchronizace, mazání s potvrzením, export / import CSV, Zamknout.
 3. **Kalkulačka** (bez hesla): tělesná váha, opakování, časy a běh na jedné obrazovce.
-   Body a hodnost se přepočítávají hned. Nic se neukládá. Prázdné pole = 0.
+   Body a hodnost se přepočítávají hned (pruh nahoře zůstává vidět). Nic se neukládá.
+   Prázdné pole = 0. Opakování a časy mají tlačítka − / + (opakování po 1, čas po 10 s);
+   běh má jen pole.
 
 ## Design
 Plátno: https://claude.ai/artifact/JwcqcGRp7pgBGdsndFk8Du
@@ -85,16 +90,18 @@ Telefon bude v `js/config.js`. Pozor: je pak veřejně vidět na webu i v repu.
 ## Struktura
     index.html
     css/style.css
+    img/favicon.svg, img/logo.svg
     js/config.js      URL, publishable klíč, telefon, týmový e-mail
-    js/scoring.js     disciplíny, body, hodnosti
-    js/storage.js     lokální data a fronta k odeslání
+    js/scoring.js     disciplíny, body, hodnosti, "další bod za", zátěž 80 %
+    js/storage.js     lokální data (zatím jen rozdělaný test) a fronta k odeslání
     js/db.js          Supabase (přihlášení, synchronizace, ping)
     js/csv.js         export / import
     js/app.js         obrazovky
-    tests.html        testy bodování, otevře se v prohlížeči
+    tests.html        testy bodování (celá bodovací tabulka), otevře se v prohlížeči
     supabase/schema.sql
     .github/workflows/keepalive.yml
     .gitignore        mimo jiné src/ (podklady do veřejného repa nepatří)
+    src/              jen lokálně: bodovací tabulka (xlsx), hodnosti (jpeg)
 
 ## Fáze
 Postupuj po jedné fázi. Po každé: spustit, ukázat Tomášovi, po odsouhlasení odškrtnout
@@ -108,6 +115,8 @@ tady a udělat commit. **Další na řadě: fáze 3.**
       Hotovo, když jde na šířce 360 px projít celý test a obnovení stránky nic nesmaže.
 - [ ] **Fáze 3 – lokální historie:** ukládání, mazání s potvrzením, export / import CSV
       (zatím bez zámku). Hotovo, když export → smazání → import vrátí stejná data.
+      Pozn.: záložka Historie je zatím placeholder; dokončený test se teď drží jen jako
+      "draft" v `storage.js` (do historie se uloží až tady).
 - [ ] **Fáze 4 – Supabase:** `supabase/schema.sql`, RLS, zámek historie, synchronizace.
       Hotovo, když bez hesla nejde přes API nic přečíst, zapsat ani smazat (kromě
       čtení `ping`) a test z jednoho telefonu je vidět na druhém.
