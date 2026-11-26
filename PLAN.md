@@ -98,12 +98,12 @@ Telefon bude v `js/config.js`. Pozor: je pak veřejně vidět na webu i v repu.
 
 ## Fáze
 Postupuj po jedné fázi. Po každé: spustit, ukázat Tomášovi, po odsouhlasení odškrtnout
-tady a udělat commit. **Další na řadě: fáze 2.**
+tady a udělat commit. **Další na řadě: fáze 3.**
 
 - [x] **Fáze 0 – příprava:** plán, CLAUDE.md, design (`design/`), logo, favicon, .gitignore
 - [x] **Fáze 1 – bodování:** `js/scoring.js`, `tests.html`.
       Hotovo, když projdou testy hraničních hodnot všech disciplín i hodností.
-- [ ] **Fáze 2 – appka:** kostra se 3 záložkami (mobil + web podle designu), průchod
+- [x] **Fáze 2 – appka:** kostra se 3 záložkami (mobil + web podle designu), průchod
       testem, výsledek, průběžné ukládání, kalkulačka. Zkopírovat `favicon.svg` a `logo.svg`.
       Hotovo, když jde na šířce 360 px projít celý test a obnovení stránky nic nesmaže.
 - [ ] **Fáze 3 – lokální historie:** ukládání, mazání s potvrzením, export / import CSV

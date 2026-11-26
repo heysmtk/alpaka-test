@@ -11,16 +11,16 @@ const byTime = (s) => (s < 90 ? 0 : 1 + Math.floor((s - 90) / 10));
 // Body za Cooperův běh: pod 2100 m = 0, jinak 1 + floor((m - 2100) / 100)
 const byDistance = (m) => (m < 2100 ? 0 : 1 + Math.floor((m - 2100) / 100));
 
-// unit: 'reps' (opakování), 'time' (sekundy), 'meters' (metry)
+// short: krátký název do seznamů; unit: 'reps' (opakování), 'time' (sekundy), 'meters' (metry)
 export const DISCIPLINES = [
-  { id: 'pullups',  name: 'Shyby nadhmatem',     unit: 'reps',   points: byReps(2) },
-  { id: 'legraise', name: 'Vznosy',              unit: 'reps',   points: byReps(2) },
-  { id: 'bench',    name: 'Bench press 80 %',    unit: 'reps',   points: byReps(4) },
-  { id: 'squat',    name: 'Dřep 80 %',           unit: 'reps',   points: byReps(4) },
-  { id: 'dips',     name: 'Kliky na bradlech',   unit: 'reps',   points: byReps(3) },
-  { id: 'plank',    name: 'Plank',               unit: 'time',   points: byTime },
-  { id: 'hyper',    name: 'Hyperextenze',        unit: 'time',   points: byTime },
-  { id: 'cooper',   name: 'Cooperův běh',        unit: 'meters', points: byDistance },
+  { id: 'pullups',  name: 'Shyby nadhmatem',     short: 'Shyby', unit: 'reps',   points: byReps(2) },
+  { id: 'legraise', name: 'Vznosy',              short: 'Vznosy', unit: 'reps',   points: byReps(2) },
+  { id: 'bench',    name: 'Bench press 80 %',    short: 'Bench press', unit: 'reps',   points: byReps(4) },
+  { id: 'squat',    name: 'Dřep 80 %',           short: 'Dřep', unit: 'reps',   points: byReps(4) },
+  { id: 'dips',     name: 'Kliky na bradlech',   short: 'Bradla', unit: 'reps',   points: byReps(3) },
+  { id: 'plank',    name: 'Plank',               short: 'Plank', unit: 'time',   points: byTime },
+  { id: 'hyper',    name: 'Hyperextenze',        short: 'Hyperextenze', unit: 'time',   points: byTime },
+  { id: 'cooper',   name: 'Cooperův běh',        short: 'Cooperův běh', unit: 'meters', points: byDistance },
 ];
 
 export const MAX_POINTS = DISCIPLINES.length * MAX_POINTS_PER_DISCIPLINE; // 80
@@ -51,6 +51,17 @@ export function pointsFor(id, value) {
   const d = getDiscipline(id);
   if (!d) throw new Error(`Neznámá disciplína: ${id}`);
   return Math.min(MAX_POINTS_PER_DISCIPLINE, d.points(clean(value)));
+}
+
+// Od kolika opakování / sekund / metrů je další bod; null, když už je plný počet bodů.
+export function nextPointAt(id, value) {
+  const v = clean(value);
+  const now = pointsFor(id, v);
+  if (now >= MAX_POINTS_PER_DISCIPLINE) return null;
+  for (let x = v + 1; x <= v + 5000; x++) {
+    if (pointsFor(id, x) > now) return x;
+  }
+  return null;
 }
 
 // results: { pullups: 12, plank: 125, ... }; chybějící disciplína = 0 bodů.

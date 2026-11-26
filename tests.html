@@ -25,7 +25,7 @@
   <script type="module">
     import {
       DISCIPLINES, MAX_POINTS, RANKS, pointsFor, pointsByDiscipline, totalPoints,
-      rankFor, nextRank, workingLoad, toSeconds, formatTime,
+      rankFor, nextRank, nextPointAt, workingLoad, toSeconds, formatTime,
     } from './js/scoring.js';
 
     let passed = 0, failed = 0;
@@ -146,6 +146,18 @@
     eq(nextRank(69)?.missing, 1, '69 b.: chybí 1');
     eq(nextRank(70), null, '70 b.: žádná vyšší hodnost');
     eq(nextRank(80), null, '80 b.: žádná vyšší hodnost');
+
+    // --- Další bod za…
+    eq(nextPointAt('pullups', 0), 2, 'shyby 0 → další bod za 2');
+    eq(nextPointAt('pullups', 3), 4, 'shyby 3 → další bod za 4');
+    eq(nextPointAt('pullups', 20), null, 'shyby 20 → plný počet bodů');
+    eq(nextPointAt('bench', 24), 28, 'bench 24 → 28');
+    eq(nextPointAt('plank', 0), 90, 'plank 0 → 90 s');
+    eq(nextPointAt('plank', 95), 100, 'plank 95 → 100 s');
+    eq(nextPointAt('cooper', 0), 2100, 'běh 0 → 2100 m');
+    eq(nextPointAt('cooper', 2150), 2200, 'běh 2150 → 2200 m');
+    eq(nextPointAt('cooper', 3000), null, 'běh 3000 → plný počet bodů');
+    eq(nextPointAt('dips', ''), 3, 'kliky prázdné → 3');
 
     // --- Zátěž 80 % váhy (po 0,5 kg)
     eq(workingLoad(80), 64, '80 kg → 64 kg');
