@@ -92,8 +92,12 @@ export function saveTests(list) {
 export function upsertTest(test) {
   const list = loadTests();
   const i = list.findIndex((t) => t.id === test.id);
-  if (i >= 0) list[i] = { ...list[i], ...test };
-  else list.push(test);
+  if (i >= 0) {
+    list[i] = { ...list[i], ...test };
+    delete list[i].synced;
+  } else {
+    list.push(test);
+  }
   return saveTests(list);
 }
 
@@ -103,7 +107,49 @@ export function setDeleted(id, deleted) {
   if (!t) return false;
   if (deleted) t.deleted_at = new Date().toISOString();
   else delete t.deleted_at;
+  delete t.synced;
   return saveTests(list);
+}
+
+// ---------- Synchronizace se serverem ----------
+// Záznam s `synced: true` je na serveru. Bez příznaku (nový, upravený, smazaný, importovaný,
+// ze starší verze appky) čeká na odeslání, nic se tak neztratí.
+
+export const needsSync = (t) => t.synced !== true;
+
+// Co se synchronizuje: výsledky, jméno, datum a smazání.
+export const snapshot = (t) => JSON.stringify([t.nick, t.created_at, t.values, t.deleted_at ?? null]);
+
+// Po odeslání označí jako synchronizované jen ty testy, které se mezitím nezměnily.
+// sent: Map id → snapshot odeslané verze.
+export function markSynced(sent) {
+  const list = loadTests();
+  for (const t of list) {
+    if (sent.has(t.id) && snapshot(t) === sent.get(t.id)) t.synced = true;
+  }
+  return saveTests(list);
+}
+
+// Zapracuje testy ze serveru do lokálních (čistá funkce). Nové ID se přidá; existující,
+// které nečekají na odeslání, se přepíšou verzí ze serveru. Čekající lokální změny zůstanou.
+export function mergeFromServer(local, server) {
+  const tests = local.map((t) => ({ ...t }));
+  let added = 0, updated = 0;
+  for (const s of server) {
+    const found = tests.find((t) => t.id === s.id);
+    if (!found) {
+      tests.push({ ...s, synced: true });
+      added++;
+    } else if (found.synced === true && snapshot(found) !== snapshot(s)) {
+      found.nick = s.nick;
+      found.created_at = s.created_at;
+      found.values = s.values;
+      if (s.deleted_at) found.deleted_at = s.deleted_at;
+      else delete found.deleted_at;
+      updated++;
+    }
+  }
+  return { tests, added, updated };
 }
 
 // Sloučí importované testy do existujících (čistá funkce, nic neukládá).
@@ -118,6 +164,7 @@ export function mergeTests(existing, incoming) {
       added++;
     } else if (found.deleted_at) {
       delete found.deleted_at;
+      delete found.synced;
       restored++;
     } else {
       duplicates++;

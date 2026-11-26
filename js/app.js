@@ -4,9 +4,10 @@ import {
   pointsFor, totalPoints, rankFor, nextRank, nextPointAt, workingLoad, toSeconds, formatTime,
 } from './scoring.js';
 import {
-  loadDraft, saveDraft, clearDraft, loadTests, saveTests, upsertTest, setDeleted, mergeTests, newId,
+  loadDraft, saveDraft, clearDraft, loadTests, saveTests, upsertTest, setDeleted, mergeTests, newId, needsSync,
 } from './storage.js';
 import { testsToCsv, parseTestsCsv } from './csv.js';
+import { state as db, initDb, login, logout, syncNow, queueSync, onChange } from './db.js';
 
 const view = document.getElementById('view');
 const LAST = DISCIPLINES.length - 1;
@@ -267,6 +268,7 @@ function finish() {
     nick: draft.nick,
     values: Object.fromEntries(DISCIPLINES.map((d) => [d.id, draft.values[d.id] ?? null])),
   });
+  queueSync();
   goStep('result');
 }
 
@@ -349,6 +351,7 @@ async function importCsv(file) {
     historyMessage = { text: 'Import se nepodařilo uložit do telefonu.', error: true };
     return renderHistory();
   }
+  queueSync();
   const parts = [`přidáno ${merged.added}`];
   if (merged.restored) parts.push(`obnoveno ${merged.restored}`);
   if (merged.duplicates) parts.push(`přeskočeno duplicit ${merged.duplicates}`);
@@ -363,7 +366,7 @@ function deleteControl(t) {
       el('span', {}, 'Smazat?'),
       el('button', {
         type: 'button', class: 'btn btn-small btn-danger',
-        onclick: () => { setDeleted(t.id, true); confirmDeleteId = null; renderHistory(); },
+        onclick: () => { setDeleted(t.id, true); confirmDeleteId = null; queueSync(); renderHistory(); },
       }, 'Ano, smazat'),
       el('button', { type: 'button', class: 'btn btn-small', onclick: () => { confirmDeleteId = null; renderHistory(); } }, 'Zrušit'),
     );
@@ -374,6 +377,8 @@ function deleteControl(t) {
   }, 'Smazat');
 }
 
+const syncText = (t) => (needsSync(t) ? '⏳ čeká na odeslání' : '✓ na serveru');
+
 function historyCard(t) {
   const total = totalPoints(t.values);
   const rank = rankFor(total);
@@ -382,6 +387,7 @@ function historyCard(t) {
       el('span', { class: 'h-main' },
         el('b', {}, t.nick),
         el('span', { class: 'muted' }, `${rank.emoji} ${rank.name} · ${dateText(t.created_at)}`),
+        el('span', { class: needsSync(t) ? 'sync pending' : 'sync' }, syncText(t)),
       ),
       el('span', { class: 'h-points' }, String(total)),
     ),
@@ -401,7 +407,7 @@ function historyCard(t) {
 function historyTable(tests) {
   return el('div', { class: 'h-table-wrap' }, el('table', { class: 'h-table' },
     el('thead', {}, el('tr', {},
-      ['Datum', 'Přezdívka', ...DISCIPLINES.map((d) => d.short), 'Body', 'Hodnost', 'Akce'].map((h) => el('th', { scope: 'col' }, h)),
+      ['Datum', 'Přezdívka', ...DISCIPLINES.map((d) => d.short), 'Body', 'Hodnost', 'Server', 'Akce'].map((h) => el('th', { scope: 'col' }, h)),
     )),
     el('tbody', {}, tests.map((t) => {
       const total = totalPoints(t.values);
@@ -412,13 +418,77 @@ function historyTable(tests) {
         DISCIPLINES.map((d) => el('td', {}, resultText(d, t.values[d.id]))),
         el('td', {}, el('b', {}, String(total))),
         el('td', {}, `${rank.emoji} ${rank.name}`),
+        el('td', { title: syncText(t).slice(2), class: needsSync(t) ? 'sync pending' : 'sync' }, needsSync(t) ? '⏳' : '✓'),
         el('td', {}, deleteControl(t)),
       );
     })),
   ));
 }
 
+// Podle tohoto klíče se pozná, jestli se změnil zámek (a je potřeba překreslit).
+const historyKey = () => `${db.ready}|${db.loggedIn}`;
+let renderedKey = '';
+
+const lockMessages = {
+  wrong: 'Špatné heslo.',
+  limit: 'Moc pokusů, zkus to za chvíli.',
+  network: 'Databáze není dostupná (jsi online? nebo je projekt neaktivní). Odemknout jde jen s připojením. Testovat můžeš dál, výsledky se uloží v telefonu.',
+  unavailable: 'Nepodařilo se načíst přihlašovací knihovnu (offline?). Testovat můžeš dál, výsledky se uloží v telefonu.',
+};
+
+function renderLock() {
+  const password = el('input', {
+    id: 'pw', class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Heslo',
+  });
+  const error = el('div', { class: 'error', role: 'alert' });
+  const submit = el('button', { type: 'submit', class: 'btn btn-primary btn-big' }, 'Odemknout');
+
+  const form = el('form', {
+    class: 'page start',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      if (!password.value) { error.textContent = 'Zadej heslo.'; return; }
+      submit.disabled = true;
+      error.textContent = '';
+      const result = await login(password.value);
+      password.value = '';
+      if (!result.ok) {
+        error.textContent = lockMessages[result.error] ?? 'Přihlášení se nepovedlo.';
+        submit.disabled = false;
+        password.focus();
+      }
+      // při úspěchu se obrazovka překreslí sama (onChange)
+    },
+  },
+    el('h1', {}, 'Historie je zamčená'),
+    el('p', { class: 'muted' }, 'Zadej týmové heslo. Telefon si přihlášení zapamatuje.'),
+    el('div', { class: 'field' }, el('label', { for: 'pw' }, 'Heslo'), password),
+    error,
+    submit,
+  );
+  view.replaceChildren(form);
+}
+
+function syncStatusLine() {
+  const waiting = loadTests().filter(needsSync).length;
+  if (db.offlineUnlock) return { text: `Offline: historie z telefonu${waiting ? `, ${waiting} čeká na odeslání` : ''}.`, error: false };
+  if (db.syncing) return { text: 'Synchronizuji…', error: false };
+  if (db.error) return { text: `${db.error}${waiting ? ` ${waiting} čeká na odeslání.` : ''}`, error: true };
+  if (waiting) return { text: `${waiting} čeká na odeslání.`, error: false };
+  if (db.lastSync) {
+    return { text: `✓ Synchronizováno ${db.lastSync.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}`, error: false };
+  }
+  return { text: '', error: false };
+}
+
 function renderHistory() {
+  renderedKey = historyKey();
+  if (!db.ready) {
+    view.replaceChildren(el('div', { class: 'page start' }, el('p', { class: 'muted' }, 'Načítám…')));
+    return;
+  }
+  if (!db.loggedIn) return renderLock();
+
   const tests = loadTests()
     .filter((t) => !t.deleted_at)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -432,6 +502,7 @@ function renderHistory() {
     (historyMessage.lines ?? []).map((l) => el('div', {}, l)),
   );
   historyMessage = null;
+  const status = syncStatusLine();
 
   view.replaceChildren(el('div', { class: 'page history' },
     el('div', { class: 'h-head' },
@@ -439,8 +510,13 @@ function renderHistory() {
       el('div', { class: 'h-tools' },
         el('button', { type: 'button', class: 'btn', disabled: tests.length === 0, onclick: downloadCsv }, 'Export CSV'),
         el('button', { type: 'button', class: 'btn', onclick: () => fileInput.click() }, 'Import CSV'),
+        el('button', { type: 'button', class: 'btn', onclick: () => logout() }, 'Zamknout'),
         fileInput,
       ),
+    ),
+    status.text && el('div', { class: `card card-row${status.error ? ' card-error' : ''}`, role: 'status' },
+      el('span', {}, status.text),
+      !db.offlineUnlock && el('button', { type: 'button', class: 'btn-text', disabled: db.syncing, onclick: () => syncNow() }, 'Synchronizovat teď'),
     ),
     message,
     tests.length === 0
@@ -557,3 +633,11 @@ function route() {
 
 window.addEventListener('hashchange', route);
 route();
+
+// Historie se překreslí, když se změní zámek, nebo skončí synchronizace.
+// Obrazovku se zámkem (a polem pro heslo) při jiných změnách nepřekreslujeme.
+onChange(() => {
+  if (location.hash !== '#/historie') return;
+  if (historyKey() !== renderedKey || (db.loggedIn && !db.syncing)) renderHistory();
+});
+initDb();

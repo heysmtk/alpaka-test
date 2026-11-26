@@ -105,7 +105,7 @@ Telefon bude v `js/config.js`. Pozor: je pak veřejně vidět na webu i v repu.
 
 ## Fáze
 Postupuj po jedné fázi. Po každé: spustit, ukázat Tomášovi, po odsouhlasení odškrtnout
-tady a udělat commit. **Další na řadě: fáze 4.**
+tady a udělat commit. **Další na řadě: fáze 5.**
 
 - [x] **Fáze 0 – příprava:** plán, CLAUDE.md, design (`design/`), logo, favicon, .gitignore
 - [x] **Fáze 1 – bodování:** `js/scoring.js`, `tests.html`.
@@ -122,9 +122,16 @@ tady a udělat commit. **Další na řadě: fáze 4.**
       při importu ignorují a počítají znovu. Import: nové ID se přidá, smazané se obnoví,
       aktivní duplicity se přeskočí, chybné řádky se přeskočí a vypíšou. Texty začínající
       `= + - @` dostanou apostrof (import ho odebere). Váha se neukládá ani neexportuje.
-- [ ] **Fáze 4 – Supabase:** `supabase/schema.sql`, RLS, zámek historie, synchronizace.
+- [x] **Fáze 4 – Supabase:** `supabase/schema.sql`, RLS, zámek historie, synchronizace.
       Hotovo, když bez hesla nejde přes API nic přečíst, zapsat ani smazat (kromě
       čtení `ping`) a test z jednoho telefonu je vidět na druhém.
+      Uděláno: `schema.sql` (tabulky `tests` + `ping`, RLS jen pro UID týmového účtu,
+      explicitní GRANTy, žádné DELETE), `js/config.js`, `js/db.js` (supabase-js 2.118.0
+      z jsDelivr, načítá se až při potřebě). Historie je za zámkem (heslo, Zamknout),
+      u testů je stav "na serveru / čeká na odeslání" (`synced` v `storage.js`; bez příznaku
+      = čeká). Synchronizace = odeslat čekající, pak stáhnout vše; běží po přihlášení,
+      po změně, při návratu online a ručně. Offline s dřívějším přihlášením se historie
+      z telefonu ukáže. Ověřeno: RLS (anon nic nepřečte ani nezapíše kromě čtení `ping`) i přihlášení se synchronizací.
 - [ ] **Fáze 5 – neaktivní databáze:** žlutá lišta, keepalive workflow.
       Hotovo, když se lišta ukáže při ručně pozastaveném projektu.
 - [ ] **Fáze 6 – nasazení:** veřejný GitHub repo, Pages, test na mobilu.

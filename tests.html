@@ -28,7 +28,8 @@
       rankFor, nextRank, nextPointAt, workingLoad, toSeconds, formatTime,
     } from './js/scoring.js';
     import { testsToCsv, parseTestsCsv, parseCsv, HEADER } from './js/csv.js';
-    import { mergeTests } from './js/storage.js';
+    import { mergeTests, mergeFromServer, needsSync, snapshot } from './js/storage.js';
+    import { testToRow, rowToTest, sanitizeValues } from './js/db.js';
 
     let passed = 0, failed = 0;
     const list = document.getElementById('list');
@@ -243,6 +244,37 @@
     eq(merged.tests.length, 3, 'merge: 3 testy');
     eq(merged.tests.some((t) => t.deleted_at), false, 'merge: obnovený test už není smazaný');
     eq(existing[1].deleted_at !== undefined, true, 'merge nemění původní pole');
+
+    // --- Synchronizace: převod řádků a slučování se serverem
+    const t1 = mk('s1', 'Pepa', {});
+    eq(testToRow(t1), { id: 's1', created_at: '2026-11-26T10:30:00.000Z', nick: 'Pepa', results: t1.values, deleted_at: null }, 'test → řádek v databázi (bez váhy)');
+    eq(Object.keys(testToRow(t1)).includes('weight'), false, 'na server se neposílá tělesná váha');
+    eq(testToRow({ ...t1, deleted_at: '2026-11-27T00:00:00.000Z' }).deleted_at, '2026-11-27T00:00:00.000Z', 'smazání se přenese');
+    const back = rowToTest({ id: 's1', created_at: '2026-11-26T10:30:00+00:00', nick: 'Pepa', results: t1.values, deleted_at: null });
+    eq(back, t1, 'řádek → test (stejná data jako původní)');
+    eq(rowToTest({ id: 's1', created_at: 'blbost', nick: 'A', results: {} }), null, 'řádek s neplatným datem se zahodí');
+    eq(rowToTest({ id: 5, created_at: '2026-11-26', nick: 'A', results: {} }), null, 'řádek s neplatným ID se zahodí');
+    eq(rowToTest({ id: 's2', created_at: '2026-11-26', nick: 'Z'.repeat(50), results: {} }).nick.length, 30, 'dlouhá přezdívka ze serveru se zkrátí');
+    eq(sanitizeValues({ pullups: 12, legraise: -1, bench: 'abc', squat: 1.5, dips: 100000, plank: 0 }),
+       { pullups: 12, legraise: null, bench: null, squat: null, dips: null, plank: 0, hyper: null, cooper: null },
+       'nesmyslné hodnoty ze serveru se změní na přeskočeno');
+    eq(sanitizeValues(null).pullups, null, 'chybějící výsledky = přeskočeno');
+
+    eq(needsSync(mk('x', 'A', {})), true, 'test bez příznaku čeká na odeslání (i ze starší verze)');
+    eq(needsSync({ ...mk('x', 'A', {}), synced: true }), false, 'synced: true = už je na serveru');
+    const srv = mk('s1', 'Pepa', { pullups: 20 });
+    const m1 = mergeFromServer([], [srv]);
+    eq([m1.added, m1.updated, m1.tests[0].synced], [1, 0, true], 'nový test ze serveru se přidá jako synchronizovaný');
+    const m2 = mergeFromServer([{ ...mk('s1', 'Pepa', {}), synced: true }], [srv]);
+    eq([m2.updated, m2.tests[0].values.pullups], [1, 20], 'synchronizovaný test se přepíše verzí ze serveru');
+    const m3 = mergeFromServer([mk('s1', 'Pepa', { pullups: 3 })], [srv]);
+    eq([m3.updated, m3.tests[0].values.pullups], [0, 3], 'čekající lokální změna se serverem nepřepíše');
+    const m4 = mergeFromServer([{ ...mk('s1', 'Pepa', {}), synced: true }], [{ ...mk('s1', 'Pepa', {}), deleted_at: '2026-11-27T00:00:00.000Z' }]);
+    eq(m4.tests[0].deleted_at, '2026-11-27T00:00:00.000Z', 'smazání z jiného telefonu se přenese');
+    const m5 = mergeFromServer([{ ...mk('s1', 'Pepa', {}), synced: true, deleted_at: '2026-11-27T00:00:00.000Z' }], [mk('s1', 'Pepa', {})]);
+    eq(m5.tests[0].deleted_at, undefined, 'obnovení z jiného telefonu se přenese');
+    eq(mergeFromServer([mk('a', 'A', {})], []).tests.length, 1, 'prázdná odpověď serveru nic nesmaže');
+    eq(snapshot(mk('x', 'A', {})) === snapshot({ ...mk('x', 'A', {}), synced: true }), true, 'snapshot ignoruje příznak synced');
 
     // --- Výsledek
     const s = document.getElementById('summary');
